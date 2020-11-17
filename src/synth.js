@@ -1,5 +1,5 @@
 import * as Tone from 'tone';
-import worklet from '-!url-loader!./worklet.js';
+import worklet from '-!url-loader?limit=false!./worklet';
 
 export class Synth {
     constructor() {
