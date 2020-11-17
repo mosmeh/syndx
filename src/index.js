@@ -57,8 +57,8 @@ async function setupSynth() {
     }
 
     const octave = document.getElementById('octave');
-    function noteOnScreen(note) {
-        synth.noteOn(+note + 12 * +octave.value, 100);
+    function noteOnScreen(note, velocity = 100) {
+        synth.noteOn(+note + 12 * +octave.value, velocity);
         highlightKey(+note);
     }
     function noteOffScreen(note) {
@@ -67,32 +67,41 @@ async function setupSynth() {
     }
 
     for (const [note, key] of Object.entries(keys)) {
-        function downHandler(e) {
-            e.preventDefault();
-            noteOnScreen(note);
+        function noteOnWithClientY(y) {
+            const rect = key.getBoundingClientRect();
+            let velocity = ((y - rect.top) / rect.height) * 127;
+            velocity = Math.max(0, Math.min(velocity, 127));
+            noteOnScreen(note, velocity);
         }
-        key.addEventListener('mousedown', downHandler);
-        key.addEventListener('touchstart', downHandler);
+        function onMouseDown(e) {
+            e.preventDefault();
+            noteOnWithClientY(e.clientY);
+        }
+        key.addEventListener('mousedown', onMouseDown);
+        key.addEventListener('mouseenter', (e) => {
+            if (e.buttons) {
+                onMouseDown(e);
+            }
+        });
+        key.addEventListener('touchstart', (e) => {
+            const touches = e.targetTouches;
+            if (touches.length > 0) {
+                e.preventDefault();
+                noteOnWithClientY(touches[touches.length - 1].clientY);
+            }
+        });
 
-        function upHandler(e) {
+        function onMouseUp(e) {
             e.preventDefault();
             noteOffScreen(note);
         }
-        key.addEventListener('mouseup', upHandler);
-        key.addEventListener('touchend', upHandler);
-
-        key.addEventListener('mouseenter', (e) => {
-            if (e.buttons !== 0) {
-                e.preventDefault();
-                noteOnScreen(note);
-            }
-        });
+        key.addEventListener('mouseup', onMouseUp);
         key.addEventListener('mouseleave', (e) => {
-            if (e.buttons !== 0) {
-                e.preventDefault();
-                noteOffScreen(note);
+            if (e.buttons) {
+                onMouseUp(e);
             }
         });
+        key.addEventListener('touchend', onMouseUp);
     }
 
     // prettier-ignore
