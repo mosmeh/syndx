@@ -21,7 +21,7 @@ class Envelope {
         this._rates = rates;
         this._level = 0;
         this._down = true;
-        this._decayIncrement = 0;
+        this._inc = 0;
         this._advance(0);
     }
 
@@ -38,14 +38,13 @@ class Envelope {
         if (this._state < 3 || (this._state < 4 && !this._down)) {
             if (this._rising) {
                 this._level +=
-                    this._decayIncrement *
-                    (2 + (this._targetLevel - this._level) / 256);
+                    this._inc * (2 + (this._targetLevel - this._level) / 256);
                 if (this._level >= this._targetLevel) {
                     this._level = this._targetLevel;
                     this._advance(this._state + 1);
                 }
             } else {
-                this._level -= this._decayIncrement;
+                this._level -= this._inc;
                 if (this._level <= this._targetLevel) {
                     this._level = this._targetLevel;
                     this._advance(this._state + 1);
@@ -66,7 +65,8 @@ class Envelope {
             );
             this._rising = this._targetLevel - this._level > 0;
             const qr = Math.min(63, (this._rates[this._state] * 41) >> 6);
-            this._decayIncrement = Math.pow(2, qr / 4) / 2048;
+            this._inc = Math.pow(2, qr / 4) / 2048;
+            this._inc *= 44100 / sampleRate;
         }
     }
 }
