@@ -30,8 +30,8 @@ class Envelope {
         this._advance(3);
     }
 
-    isFinished() {
-        return this._state === 4;
+    get active() {
+        return this._state !== 4;
     }
 
     render() {
@@ -89,10 +89,11 @@ function scaleVelocity(velocity, sensitivity) {
 
 class Operator {
     constructor(params, baseFreq, velocity) {
-        this.val = 0;
+        this.value = 0;
 
-        this.ampL = Math.cos(((Math.PI / 2) * (params.pan + 50)) / 100);
-        this.ampR = Math.sin(((Math.PI / 2) * (params.pan + 50)) / 100);
+        const x = ((Math.PI / 2) * (params.pan + 50)) / 100;
+        this.ampL = Math.cos(x);
+        this.ampR = Math.sin(x);
 
         let outLevel = scaleOutLevel(params.volume) << 5;
         outLevel += scaleVelocity(velocity, params.velocitySens);
@@ -104,9 +105,8 @@ class Operator {
         this._phase = 0;
         this._envelope = new Envelope(params.levels, params.rates);
 
-        const OCTAVE_1024 = 1.0006771307; // Math.exp(Math.log(2) / 1024);
         const freq =
-            baseFreq * params.freqCoarse * Math.pow(OCTAVE_1024, params.detune);
+            baseFreq * params.freqCoarse * Math.pow(2, params.detune / 1024);
         this._phaseStep = (2 * Math.PI * freq) / sampleRate;
     }
 
@@ -114,17 +114,17 @@ class Operator {
         this._envelope.noteOff();
     }
 
-    isFinished() {
-        return this._envelope.isFinished();
+    get active() {
+        return this._envelope.active;
     }
 
     render(mod) {
-        this.val = Math.sin(this._phase + mod) * this._envelope.render();
+        this.value = Math.sin(this._phase + mod) * this._envelope.render();
         this._phase += this._phaseStep;
         if (this._phase >= 2 * Math.PI) {
             this._phase -= 2 * Math.PI;
         }
-        return this.val;
+        return this.value;
     }
 }
 
@@ -205,14 +205,12 @@ const feedbackRatio = Math.pow(2, PATCH.feedback - 7);
 class Voice {
     constructor(note, velocity) {
         this.note = note;
-        const freq = 440 * Math.pow(2, (note - 69) / 12);
-
         this.down = true;
 
-        this._operators = [];
-        for (const param of PATCH.operators) {
-            this._operators.push(new Operator(param, freq, velocity));
-        }
+        const freq = 440 * Math.pow(2, (note - 69) / 12);
+        this._operators = PATCH.operators.map(
+            (param) => new Operator(param, freq, velocity)
+        );
     }
 
     noteOff() {
@@ -221,13 +219,13 @@ class Voice {
         }
     }
 
-    isFinished() {
+    get active() {
         for (const i of CARRIERS) {
-            if (!this._operators[i].isFinished()) {
-                return false;
+            if (this._operators[i].active) {
+                return true;
             }
         }
-        return true;
+        return false;
     }
 
     render() {
@@ -237,7 +235,8 @@ class Voice {
                 const modulator = MOD_MATRIX[i];
                 const op = this._operators[modulator];
                 mod =
-                    op.val * (i === modulator ? feedbackRatio : op.outputLevel);
+                    op.value *
+                    (i === modulator ? feedbackRatio : op.outputLevel);
             }
             this._operators[i].render(mod);
         }
@@ -245,7 +244,7 @@ class Voice {
         const out = [0, 0];
         for (const i of CARRIERS) {
             const carrier = this._operators[i];
-            const level = carrier.val * carrier.outputLevel;
+            const level = carrier.value * carrier.outputLevel;
             out[0] += level * carrier.ampL;
             out[1] += level * carrier.ampR;
         }
@@ -321,7 +320,7 @@ class Processor extends AudioWorkletProcessor {
             outR[i] = r;
         }
 
-        this._voices = this._voices.filter((voice) => !voice.isFinished());
+        this._voices = this._voices.filter((voice) => voice.active);
 
         return true;
     }
